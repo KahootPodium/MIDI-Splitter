@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>MIDI Splitter</title>
+  <style>
+    body {
+      font-family: Arial;
+      margin: 20px;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin-right: 10px;
+      border: 1px solid #ccc;
+      transition: box-shadow 0.1s ease-in-out;
+    }
+
+    .playing {
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    .control-container {
+      margin-top: 20px;
+    }
+
+    .control-container label {
+      margin-right: 10px;
+    }
+    
+    #midiOutputSelect2 {
+      margin-left: 10px;
+    }
+
+    .control-container input[type="range"] {
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>MIDI Splitter</h1>
+  
+  <div class="control-container">
+    <button id="playButton">Play</button>
+    <button id="stopButton">Stop</button>
+  </div>
+  
+  <div class="control-container">
+    <label for="splitSlider">Split key: <span id="splitKeyDisplay">60</span></label>
+    <input type="range" id="splitSlider" min="10" max="88" value="60">
+  </div>
+
+  <div class="control-container">
+    <label for="midiInputSelect">Select MIDI Input:</label>
+    <select id="midiInputSelect">
+      <option value="">--</option>
+    </select>
+  </div>
+
+  <div class="control-container">
+    <label for="midiOutputSelect1">Select MIDI Output:</label>
+    <select id="midiOutputSelect1">
+      <option value="">--</option>
+    </select>
+    
+    <select id="midiOutputSelect2">
+      <option value="">--</option>
+    </select>
+  </div>
+
+  <script>
+    let isPlaying = false, splitKey = 60, input = null;
+
+    function stopAllNotes() {
+      for (let ch = 0; ch < 16; ch++) {
+        out1 && out1.send([0xB0 + ch, 123, 0]);
+        out2 && out2.send([0xB0 + ch, 123, 0]);
+      }
+    }
+
+    navigator.requestMIDIAccess({sysex: false}).then(midi => {
+      const midiInputSelect = document.getElementById("midiInputSelect");
+      const midiOutputSelect1 = document.getElementById("midiOutputSelect1");
+      const midiOutputSelect2 = document.getElementById("midiOutputSelect2");
+      
+      midi.inputs.forEach(midiInput => {
+        const option = document.createElement("option");
+        option.value = midiInput.id;
+        option.textContent = midiInput.name;
+        midiInputSelect.appendChild(option);
+      });
+
+      midi.outputs.forEach(midiOutput => {
+        const option1 = document.createElement("option");
+        option1.value = midiOutput.id;
+        option1.textContent = midiOutput.name;
+        midiOutputSelect1.appendChild(option1);
+
+        const option2 = document.createElement("option");
+        option2.value = midiOutput.id;
+        option2.textContent = midiOutput.name;
+        midiOutputSelect2.appendChild(option2);
+      });
+
+      midiInputSelect.addEventListener("change", () => {
+        input && (input.onmidimessage = null);
+        input = midi.inputs.get(midiInputSelect.value);
+
+        if (input) {
+          input.onmidimessage = midiEvent => {
+            if (isPlaying) {
+              let [status, note, velocity] = midiEvent.data;
+
+              if (note === 108) return stopAllNotes();
+              if ((status & 0xF0) === 0x90 && velocity === 1 && input.name.includes("IAC Driver Bus 1"))
+                velocity = 127;
+
+              (note >= splitKey ? out2 : out1)?.send([status, note, velocity]);
+            }
+          };
+        }
+        
+        updateOptions();
+      });
+
+      midiOutputSelect1.addEventListener("change", () => {
+        out1 = midi.outputs.get(midiOutputSelect1.value) || null;
+      });
+
+      midiOutputSelect2.addEventListener("change", () => {
+        out2 = midi.outputs.get(midiOutputSelect2.value) || null;
+      });
+
+      function updateOptions() {
+        const selectedInput = midi.inputs.get(midiInputSelect.value) || null;
+        const selectedOut1 = midi.outputs.get(midiOutputSelect1.value) || null;
+        const selectedOut2 = midi.outputs.get(midiOutputSelect2.value) || null;
+
+        if (selectedInput?.name === selectedOut1?.name) midiOutputSelect1.value = "";
+        if (selectedInput?.name === selectedOut2?.name) midiOutputSelect2.value = "";
+
+        Array.from(midiOutputSelect1.options).forEach(option => {
+          option.disabled = selectedInput?.name && option.textContent === selectedInput.name;
+        });
+
+        Array.from(midiOutputSelect2.options).forEach(option => {
+          option.disabled = selectedInput?.name && option.textContent === selectedInput.name;
+        });
+      }
+    });
+
+    document.getElementById("playButton").addEventListener("click", () => {
+      isPlaying = true;
+      document.getElementById("playButton").classList.add("playing");
+      document.getElementById("stopButton").classList.remove("playing");
+    });
+
+    document.getElementById("stopButton").addEventListener("click", () => {
+      isPlaying = false;
+      document.getElementById("playButton").classList.remove("playing");
+      document.getElementById("stopButton").classList.add("playing");
+      stopAllNotes();
+    });
+
+    document.getElementById("splitSlider").addEventListener("input", e => {
+      splitKey = parseInt(e.target.value);
+      document.getElementById("splitKeyDisplay").textContent = splitKey;
+    });
+  </script>
+</body>
+</html>
