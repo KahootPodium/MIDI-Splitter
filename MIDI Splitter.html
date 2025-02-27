@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>MIDI Splitter</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin-right: 10px;
+      cursor: pointer;
+      border: 1px solid #ccc;
+      background-color: #f0f0f0;
+      transition: box-shadow 0.1s ease-in-out;
+    }
+    .playing {
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    }
+    label {
+      margin-right: 10px;
+    }
+    .control-container {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>MIDI Splitter</h1>
+  
+  <div class="control-container">
+    <button id="playButton">Play</button>
+    <button id="stopButton">Stop</button>
+  </div>
+  
+  <div class="control-container">
+    <label for="splitSlider">Split key: <span id="splitKeyDisplay">60</span></label>
+    <input type="range" id="splitSlider" min="10" max="88" value="60">
+  </div>
+
+  <div class="control-container">
+    <label for="midiInputSelect">Select MIDI Input:</label>
+    <select id="midiInputSelect">
+      <option value="">--</option>
+    </select>
+  </div>
+
+  <script>
+    let isPlaying = false, splitKey = 60, input, out1, out2;
+
+    function stopAllNotes() {
+      for (let ch = 0; ch < 16; ch++) {
+        out1 && out1.send([0xB0 + ch, 123, 0]);
+        out2 && out2.send([0xB0 + ch, 123, 0]);
+      }
+    }
+
+    navigator.requestMIDIAccess({sysex: false}).then(midi => {
+      const midiInputSelect = document.getElementById('midiInputSelect');
+      const outputs = [...midi.outputs.values()];
+      input = [...midi.inputs.values()].find(i => i.name.includes("IAC Driver Bus 1"));
+      out1 = outputs.find(o => o.name.includes("IAC Driver Bus 2"));
+      out2 = outputs.find(o => o.name.includes("IAC Driver Bus 3"));
+      
+      midi.inputs.forEach(midiInput => {
+        const option = document.createElement('option');
+        option.value = midiInput.id;
+        option.textContent = midiInput.name;
+        midiInputSelect.appendChild(option);
+      });
+
+      midiInputSelect.addEventListener('change', () => {
+        if (input) input.onmidimessage = null;
+        input = midi.inputs.get(midiInputSelect.value);
+        if (input) {
+          input.onmidimessage = e => {
+            if (!isPlaying) return;
+            let [status, note, velocity] = e.data;
+            if (note === 108) {
+              stopAllNotes();
+              return;
+            }
+            if ((status & 0xF0) === 0x90 && velocity === 1 && input.name.includes("IAC Driver Bus 1"))
+              velocity = 127;
+            (note >= splitKey ? out2 : out1).send([status, note, velocity]);
+          };
+        }
+      });
+    });
+
+    document.getElementById("playButton").addEventListener("click", () => {
+      isPlaying = true;
+      document.getElementById("playButton").classList.add("playing");
+      document.getElementById("stopButton").classList.remove("playing");
+    });
+
+    document.getElementById("stopButton").addEventListener("click", () => {
+      isPlaying = false;
+      document.getElementById("playButton").classList.remove("playing");
+      document.getElementById("stopButton").classList.add("playing");
+      stopAllNotes();
+    });
+
+    document.getElementById("splitSlider").addEventListener("input", e => {
+      splitKey = parseInt(e.target.value);
+      document.getElementById("splitKeyDisplay").textContent = splitKey;
+    });
+  </script>
+</body>
+</html>
