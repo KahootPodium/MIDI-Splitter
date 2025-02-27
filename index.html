@@ -113,9 +113,9 @@
             if (isPlaying) {
               let [status, note, velocity] = midiEvent.data;
 
-              if (note === 108)
+              if (note === 108) 
                 return stopAllNotes();
-
+              
               if ((status & 0xF0) === 0x90 && velocity === 1 && input.name.includes("IAC Driver Bus 1"))
                 velocity = 127;
 
@@ -129,12 +129,12 @@
 
       midiOutputSelect1.addEventListener("change", () => {
         out1 = midi.outputs.get(midiOutputSelect1.value) || null;
-        stopAllNotes(); // Ensure it stops all notes when changing output
+        stopAllNotes();
       });
 
       midiOutputSelect2.addEventListener("change", () => {
         out2 = midi.outputs.get(midiOutputSelect2.value) || null;
-        stopAllNotes(); // Ensure it stops all notes when changing output
+        stopAllNotes();
       });
 
       function updateOptions() {
@@ -165,7 +165,7 @@
       isPlaying = false;
       document.getElementById("playButton").classList.remove("playing");
       document.getElementById("stopButton").classList.add("playing");
-      stopAllNotes(); // Stop all notes when clicking stop button
+      stopAllNotes();
     });
 
     document.getElementById("splitSlider").addEventListener("input", e => {
